@@ -1,4 +1,6 @@
 use std::error::Error;
+use std::io::{self, BufRead, BufReader};
+use std::fs::File;
 
 use clap::{App, Arg};
 
@@ -39,13 +41,33 @@ pub fn get_args() -> MyResult<Config> {
         .get_matches();
 
     Ok(Config {
-        in_file: matches.value_of_lossy("in_file").unwrap().to_string(),
+        in_file: matches.value_of("in_file").unwrap().to_string(),
         out_file: matches.value_of("out_file").map(String::from),
         count: matches.is_present("count"),
     })
 }
 
+fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
+    match filename {
+        "-" => Ok(Box::new(BufReader::new(io::stdin()))),
+        _ => Ok(Box::new(BufReader::new(File::open(filename)?))),
+    }
+}
+
 pub fn run(config: Config) -> MyResult<()> {
-    println!("{:#?}", config);
+    let mut buf_read = open(&config.in_file)
+        .map_err(|e| format!("{}: {}", &config.in_file, e))?;
+
+    let mut buffer = String::new();
+
+    while let Ok(bytes_read) = buf_read.read_line(&mut buffer) {
+        if bytes_read == 0 {
+            break;
+        }
+
+        print!("{}", buffer);
+        buffer.clear();
+    }
+
     Ok(())
 }
