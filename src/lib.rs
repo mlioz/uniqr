@@ -1,6 +1,7 @@
 use std::error::Error;
-use std::io::{self, BufRead, BufReader};
 use std::fs::File;
+use std::io::{self, BufRead, BufReader, Write, BufWriter};
+use std::path::Path;
 
 use clap::{App, Arg};
 
@@ -16,7 +17,7 @@ pub struct Config {
 pub fn get_args() -> MyResult<Config> {
     let matches = App::new("uniqr")
         .about("Rust uniq")
-        .author("Myron Lioz <liozmyron@gmail.com")
+        .author("Myron Lioz <liozmyron@gmail.com>")
         .version("0.1.0")
         .arg(
             Arg::with_name("in_file")
@@ -55,18 +56,54 @@ fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
 }
 
 pub fn run(config: Config) -> MyResult<()> {
-    let mut buf_read = open(&config.in_file)
-        .map_err(|e| format!("{}: {}", &config.in_file, e))?;
+    let mut buf_read = open(&config.in_file).map_err(|e| format!("{}: {}", &config.in_file, e))?;
+    
+    let buf_write = match config.out_file {
+        None => Box::new(BufWriter::new(io::stdout())),
+        Some(out_filename) => Box::new(BufWriter::new(File::create(Path::new(&out_filename)?))),
+    };
 
-    let mut buffer = String::new();
+    let mut prev_line = String::new();
 
-    while let Ok(bytes_read) = buf_read.read_line(&mut buffer) {
+    let bytes_read = buf_read.read_line(&mut prev_line)?;
+    if bytes_read == 0 {
+        return Ok(());
+    }
+
+    let mut unique_count = 1;
+    loop {
+        let mut current_line = String::new();
+
+        let bytes_read = buf_read.read_line(&mut current_line)?;
+
+        if bytes_read != 0 && prev_line.eq(&current_line) {
+            if config.count {
+                unique_count += 1;
+            }
+
+            continue;
+        }
+
+        match out_file {
+            None => 
+        }
+        write!(
+            "{}{}",
+            if config.count {
+                format!("{:>4} ", unique_count)
+            } else {
+                "".to_string()
+            },
+            &prev_line
+        );
+
         if bytes_read == 0 {
             break;
         }
 
-        print!("{}", buffer);
-        buffer.clear();
+        unique_count = 1;
+
+        prev_line = current_line;
     }
 
     Ok(())
