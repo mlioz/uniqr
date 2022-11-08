@@ -1,6 +1,7 @@
 use std::error::Error;
-use std::io::{self, BufRead, BufReader};
 use std::fs::File;
+use std::io::{self, BufRead, BufReader, Write, BufWriter};
+use std::path::Path;
 
 use clap::{App, Arg};
 
@@ -16,7 +17,7 @@ pub struct Config {
 pub fn get_args() -> MyResult<Config> {
     let matches = App::new("uniqr")
         .about("Rust uniq")
-        .author("Myron Lioz <liozmyron@gmail.com")
+        .author("Myron Lioz <liozmyron@gmail.com>")
         .version("0.1.0")
         .arg(
             Arg::with_name("in_file")
@@ -34,7 +35,7 @@ pub fn get_args() -> MyResult<Config> {
         .arg(
             Arg::with_name("count")
                 .short("c")
-                .long("long")
+                .long("count")
                 .takes_value(false)
                 .help("prefix lines by the number of occurrences"),
         )
@@ -54,19 +55,52 @@ fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
     }
 }
 
+fn open_output_file_or_stdout(filename: Option<String>) -> MyResult<Box<dyn Write>> {
+    match filename {
+        None => Ok(Box::new(BufWriter::new(io::stdout()))),
+        Some(filename) => Ok(Box::new(BufWriter::new(File::create(Path::new(&filename))?))),
+    }
+}
+
 pub fn run(config: Config) -> MyResult<()> {
-    let mut buf_read = open(&config.in_file)
-        .map_err(|e| format!("{}: {}", &config.in_file, e))?;
+    let mut buf_read = open(&config.in_file).map_err(|e| format!("{}: {}", &config.in_file, e))?;
+    
+    let mut buf_write: Box<dyn Write> = open_output_file_or_stdout(config.out_file)?;
 
-    let mut buffer = String::new();
+    let mut prev_line = String::new();
 
-    while let Ok(bytes_read) = buf_read.read_line(&mut buffer) {
+    let bytes_read = buf_read.read_line(&mut prev_line)?;
+    if bytes_read == 0 {
+        return Ok(());
+    }
+
+    let mut unique_count = 1;
+    loop {
+        let mut current_line = String::new();
+
+        let bytes_read = buf_read.read_line(&mut current_line)?;
+
+        if bytes_read != 0 && prev_line.trim_end_matches('\n').eq(current_line.trim_end_matches('\n')) {
+            if config.count {
+                unique_count += 1;
+            }
+
+            continue;
+        }
+
+        if config.count {
+            write!(buf_write, "{:>4} {}", unique_count, prev_line)?;
+        } else {
+            write!(buf_write, "{}", prev_line)?;
+        };
+
         if bytes_read == 0 {
             break;
         }
 
-        print!("{}", buffer);
-        buffer.clear();
+        unique_count = 1;
+
+        prev_line = current_line;
     }
 
     Ok(())
