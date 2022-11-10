@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write, BufWriter};
+use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 
 use clap::{App, Arg};
@@ -58,13 +58,15 @@ fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
 fn open_output_file_or_stdout(filename: Option<String>) -> MyResult<Box<dyn Write>> {
     match filename {
         None => Ok(Box::new(BufWriter::new(io::stdout()))),
-        Some(filename) => Ok(Box::new(BufWriter::new(File::create(Path::new(&filename))?))),
+        Some(filename) => Ok(Box::new(BufWriter::new(File::create(Path::new(
+            &filename,
+        ))?))),
     }
 }
 
 pub fn run(config: Config) -> MyResult<()> {
     let mut buf_read = open(&config.in_file).map_err(|e| format!("{}: {}", &config.in_file, e))?;
-    
+
     let mut buf_write: Box<dyn Write> = open_output_file_or_stdout(config.out_file)?;
 
     let mut prev_line = String::new();
@@ -80,13 +82,17 @@ pub fn run(config: Config) -> MyResult<()> {
 
         let bytes_read = buf_read.read_line(&mut current_line)?;
 
-        if bytes_read != 0 && prev_line.trim_end_matches('\n').eq(current_line.trim_end_matches('\n')) {
+        if bytes_read != 0
+            && prev_line
+                .trim_end_matches('\n')
+                .eq(current_line.trim_end_matches('\n'))
+        {
             if config.count {
                 unique_count += 1;
             }
 
             continue;
-        }
+        };
 
         if config.count {
             write!(buf_write, "{:>4} {}", unique_count, prev_line)?;
